@@ -6,20 +6,27 @@ function say(text: string): Action<SDSContext, SDSEvent> {
 }
 
 const grammar: { [index: string]: { title?: string, day?: string, time?: string } } = {
-    //"Lecture.": { title: "Dialogue systems lecture" },
+    "Lab.": { title: "Laboration" },
+    "Lecture.": { title: "Dialogue systems lecture" },
     "Exam.": { title: "Exam at the university" },
-    "Monday.": { day: "Monday" },
-    "Tuesday.": { day: "Tuesday" },
-    "Wednesday.": { day: "Wednesday" },
-    "Thirsday.": { day: "Thirsday" },
-    "Friday.": { day: "Friday" },
-    "Saturday.": { day: "Saturday" },
-    "Sunday": { day: "Sunday" },
-    //"on Saturday": { day: "Saturday" },
-    "Hello.": { time: "10:00" },
-    "at eleven": { time: "11:00" },
-    "at twelve": { time: "12:00" },
+    "On Monday.": { day: "Monday" },
+    "On Tuesday.": { day: "Tuesday" },
+    "On Wednesday.": { day: "Wednesday" },
+    "On Thirsday.": { day: "Thirsday" },
+    "On Friday.": { day: "Friday" },
+    "On Saturday.": { day: "Saturday" },
+    "On Sunday.": { day: "Sunday" },
+    "At 8:00": { time: "08:00" },
+    "At 9:00": { time: "09:00" },
+    "At 10": { time: "10:00" },
+    "At 11": { time: "11:00" },
+    "At 12": { time: "12:00" },
+    "At 13": { time: "13:00" },
+    "At 14": { time: "14:00" },
+    "At 15": { time: "15:00" },
+    "At 16": { time: "16:00" },
 }
+
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
     initial: 'idle',
     states: {
@@ -63,6 +70,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 }
             }
         },
+        info_meeting: {
+            entry: send((context) => ({
+                type: 'SPEAK',
+                value: `OK, ${context.title}`
+            })),
+            on: { ENDSPEECH: 'weekday' }
+        },
         weekday: {
             initial: 'prompt',
             on: {
@@ -92,6 +106,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 }
             }
         },
+        info_weekday: {
+            entry: send((context) => ({
+                type: 'SPEAK',
+                value: `OK, ${context.day}`
+            })),
+            on: { ENDSPEECH: 'timeofday' }
+        },
         timeofday: {
             initial: 'prompt',
             on: {
@@ -120,20 +141,6 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     on: { ENDSPEECH: 'ask_time' }
                 }
             }
-        },
-        info_meeting: {
-            entry: send((context) => ({
-                type: 'SPEAK',
-                value: `OK, ${context.title}`
-            })),
-            on: { ENDSPEECH: 'weekday' }
-        },
-        info_weekday: {
-            entry: send((context) => ({
-                type: 'SPEAK',
-                value: `OK, ${context.day}`
-            })),
-            on: { ENDSPEECH: 'timeofday' }
         },
         info_timeofday: {
             entry: send((context) => ({
