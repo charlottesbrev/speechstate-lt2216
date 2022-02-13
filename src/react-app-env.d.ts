@@ -39,6 +39,7 @@ interface SDSContext {
     title: string;
     day: string;
     time: string;
+    acknowledge: string;
 }
 
 type SDSEvent =

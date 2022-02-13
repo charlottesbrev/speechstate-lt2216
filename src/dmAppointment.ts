@@ -5,7 +5,7 @@ function say(text: string): Action<SDSContext, SDSEvent> {
     return send((_context: SDSContext) => ({ type: "SPEAK", value: text }))
 }
 
-const grammar: { [index: string]: { title?: string, day?: string, time?: string } } = {
+const grammar: { [index: string]: { title?: string, day?: string, time?: string, acknowledge?:string } } = {
     "Lab.": { title: "Laboration" },
     "Lecture.": { title: "Dialogue systems lecture" },
     "Exam.": { title: "Exam at the university" },
@@ -25,6 +25,8 @@ const grammar: { [index: string]: { title?: string, day?: string, time?: string 
     "At 14": { time: "14:00" },
     "At 15": { time: "15:00" },
     "At 16": { time: "16:00" },
+    "Yes.": {acknowledge: "Yes"},
+    "No.": {acknowledge: "No"},
 }
 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
@@ -111,7 +113,54 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 type: 'SPEAK',
                 value: `OK, ${context.day}`
             })),
-            on: { ENDSPEECH: 'timeofday' }
+            on: { ENDSPEECH: 'wholeday' }
+        },
+        wholeday: {
+            initial: 'prompt',
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'info_wholeday',
+                        cond: (context) => "acknowledge" in (grammar[context.recResult[0].utterance] || {}),
+                        actions: assign({ acknowledge: (context) => grammar[context.recResult[0].utterance].acknowledge! })
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ],
+                TIMEOUT: '.prompt'
+            },
+            states: {
+                prompt: {
+                    entry: say("Will it take the whole day?"),
+                    on: { ENDSPEECH: 'waitfor_yesno' }
+                },
+                waitfor_yesno: {
+                    entry: send('LISTEN')
+				},
+                nomatch: {
+                    entry: say("Sorry, I don't know what it is. Tell me a yes or a no."),
+                    on: { ENDSPEECH: 'waitfor_yesno' }
+                }
+            }
+        },
+        info_wholeday: {
+            entry: send((context) => (
+                    {
+                        type: 'SPEAK',
+                        value: `OK, ${context.acknowledge}`
+                    }
+                )),
+            on: { ENDSPEECH: [
+                {
+                    target: 'welcome',
+                    cond: (context) => context.acknowledge == "Yes"
+                },
+                {
+                    target: 'timeofday',
+                    cond: (context) => context.acknowledge == "No"
+                }
+            ] }
         },
         timeofday: {
             initial: 'prompt',
