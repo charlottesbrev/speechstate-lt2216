@@ -64,7 +64,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     {
                         target: 'info_weekday',
                         cond: (context) => "day" in (grammar[context.recResult[0].utterance] || {}),
-                        actions: assign({ day: (context) => grammar[context.recResult[1].utterance].day! })
+                        actions: assign({ day: (context) => grammar[context.recResult[0].utterance].day! })
                     },
                     {
                         target: '.nomatch'
