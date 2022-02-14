@@ -26,6 +26,8 @@ const grammar: { [index: string]: { title?: string, day?: string, time?: string,
     "At 16": { time: "16:00" },
     "Yes.": {acknowledge: "Yes"},
     "No.": {acknowledge: "No"},
+    "Of course.": {acknowledge: "Yes"},
+    "No way.": {acknowledge: "No"},
 }
 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
