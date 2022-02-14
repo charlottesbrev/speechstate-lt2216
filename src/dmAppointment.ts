@@ -39,8 +39,19 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
         },
         init: {
             on: {
-                TTS_READY: 'welcome',
-                CLICK: 'welcome'
+                TTS_READY: 'intro',
+                CLICK: 'intro'
+            }
+        },
+        intro: {
+            initial: 'prompt',
+            on: {
+                ENDSPEECH: 'welcome'
+            },
+            states: {
+                prompt: {
+                    entry: say("Let's create a meeting"),
+                },
             }
         },
         welcome: {
@@ -60,7 +71,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             },
             states: {
                 prompt: {
-                    entry: say("Let's create a meeting. What is it about?"),
+                    entry: say("What is it about?"),
                     on: { ENDSPEECH: 'ask_meeting' }
                 },
                 ask_meeting: {
@@ -145,22 +156,61 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             }
         },
         info_wholeday: {
-            entry: send((context) => (
-                    {
+            entry: send((context) => ({
                         type: 'SPEAK',
                         value: `OK, ${context.acknowledge}`
-                    }
-                )),
-            on: { ENDSPEECH: [
-                {
-                    target: 'welcome',
-                    cond: (context) => context.acknowledge == "Yes"
+                    })),
+            on: { ENDSPEECH: [{
+                    target: 'meeting_wholeday',
+                    cond: (context) => context.acknowledge === "Yes"
                 },
                 {
                     target: 'timeofday',
-                    cond: (context) => context.acknowledge == "No"
+                    cond: (context) => context.acknowledge === "No"
+                }] }
+        },
+        meeting_wholeday: {
+            initial: 'prompt',
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'info_meeting_wholeday',
+                        cond: (context) => "acknowledge" in (grammar[context.recResult[0].utterance] || {}),
+                        actions: assign({ acknowledge: (context) => grammar[context.recResult[0].utterance].acknowledge! })
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ],
+                TIMEOUT: '.prompt'
+            },
+            states: {
+                prompt: {
+                    entry: say("Do you want me to create a meeting titled 1 on 2 for the whole day?"),
+                    on: { ENDSPEECH: 'waitfor_yesno' }
+                },
+                waitfor_yesno: {
+                    entry: send('LISTEN')
+				},
+                nomatch: {
+                    entry: say("Sorry, I don't know what it is. Tell me a yes or a no."),
+                    on: { ENDSPEECH: 'waitfor_yesno' }
                 }
-            ] }
+            }
+        },
+        info_meeting_wholeday: {
+            entry: send((context) => ({
+                        type: 'SPEAK',
+                        value: `OK, ${context.acknowledge}`
+                    })),
+            on: { ENDSPEECH: [{
+                    target: 'done',
+                    cond: (context) => context.acknowledge === "Yes"
+                },
+                {
+                    target: 'welcome',
+                    cond: (context) => context.acknowledge === "No"
+                }] }
         },
         timeofday: {
             initial: 'prompt',
@@ -196,7 +246,62 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 type: 'SPEAK',
                 value: `OK, ${context.time}`
             })),
-            on: { ENDSPEECH: 'timeofday' }
+            on: { ENDSPEECH: 'meeting_time' }
+        },
+        meeting_time: {
+            initial: 'prompt',
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'info_meeting_time',
+                        cond: (context) => "acknowledge" in (grammar[context.recResult[0].utterance] || {}),
+                        actions: assign({ acknowledge: (context) => grammar[context.recResult[0].utterance].acknowledge! })
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ],
+                TIMEOUT: '.prompt'
+            },
+            states: {
+                prompt: {
+                    entry: say("Do you want me to create a meeting titled 1 on 2 at 3?"),
+                    on: { ENDSPEECH: 'waitfor_yesno' }
+                },
+                waitfor_yesno: {
+                    entry: send('LISTEN')
+				},
+                nomatch: {
+                    entry: say("Sorry, I don't know what it is. Tell me a yes or a no."),
+                    on: { ENDSPEECH: 'waitfor_yesno' }
+                }
+            }
+        },
+        info_meeting_time: {
+            entry: send((context) => ({
+                        type: 'SPEAK',
+                        value: `OK, ${context.acknowledge}`
+                    })),
+            on: { ENDSPEECH: [{
+                    target: 'done',
+                    cond: (context) => context.acknowledge === "Yes"
+                },
+                {
+                    target: 'welcome',
+                    cond: (context) => context.acknowledge === "No"
+                }] }
+        },
+        done: {
+            initial: 'prompt',
+            states: {
+                prompt: {
+                    entry: say("Your meeting has been created"),
+                    on: { ENDSPEECH: 'stop' }
+                },
+                stop: {
+                    type: 'final'
+                }
+            }
         }
     }
 })
