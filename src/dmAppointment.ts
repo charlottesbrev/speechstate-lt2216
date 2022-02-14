@@ -1,12 +1,11 @@
 import { MachineConfig, send, Action, assign } from "xstate";
 
-
 function say(text: string): Action<SDSContext, SDSEvent> {
     return send((_context: SDSContext) => ({ type: "SPEAK", value: text }))
 }
 
 const grammar: { [index: string]: { title?: string, day?: string, time?: string, acknowledge?:string } } = {
-    "Lab.": { title: "Laboration" },
+    "Lab": { title: "Laboration" },
     "Lecture.": { title: "Dialogue systems lecture" },
     "Exam.": { title: "Exam at the university" },
     "On Monday.": { day: "Monday" },
@@ -186,7 +185,9 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             },
             states: {
                 prompt: {
-                    entry: say("Do you want me to create a meeting titled 1 on 2 for the whole day?"),
+                    entry: send((context: SDSContext) => ({
+                        type: "SPEAK", value: `Do you want me to create a meeting titled ${context.title} on ${context.day} for the whole day?`
+                    })),
                     on: { ENDSPEECH: 'waitfor_yesno' }
                 },
                 waitfor_yesno: {
@@ -229,7 +230,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             },
             states: {
                 prompt: {
-                    entry: say("On which hour is it?"),
+                    entry: say("What time is your meeting?"),
                     on: { ENDSPEECH: 'ask_time' }
                 },
                 ask_time: {
@@ -265,7 +266,9 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             },
             states: {
                 prompt: {
-                    entry: say("Do you want me to create a meeting titled 1 on 2 at 3?"),
+                    entry: send((context: SDSContext) => ({
+                        type: "SPEAK", value: `Do you want me to create a meeting titled ${context.title} on ${context.day} at ${context.time}?`
+                    })),
                     on: { ENDSPEECH: 'waitfor_yesno' }
                 },
                 waitfor_yesno: {
