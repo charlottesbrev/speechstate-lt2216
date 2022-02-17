@@ -52,6 +52,9 @@ function parse_whois(text: string): string {
         return "";
 }
 
+const kbRequest = (text: string) =>
+    fetch(new Request(`https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`)).then(data => data.json())
+
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
     initial: 'idle',
     states: {
@@ -117,7 +120,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 prompt: {
                     entry: send((context: SDSContext) => ({
                         type: 'SPEAK',
-                        value: `Hi, ${context.username}! What do you want to do?`
+                        value: `Hi, ${context.username}! What do you want to do? You can create a meeting, or ask who is X.`
                     })),
                     on: { ENDSPEECH: 'select_whattodo' }
                 },
@@ -125,13 +128,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     entry: send('LISTEN')
 				},
                 nomatch: {
-                    entry: say("Sorry, I don't know what it is. You can create a meeting or ask who is."),
+                    entry: say("Sorry, I don't know what it is."),
                     on: { ENDSPEECH: 'select_whattodo' }
                 }
             }
         },
         check_whois: {
-            initial: 'prompt',
+            initial: 'get_result',
             on: {
                 RECOGNISED: [
                     {
@@ -147,10 +150,17 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         target: '.nomatch'
                     }
                 ],
-                TIMEOUT: '.prompt'
+                TIMEOUT: '.get_result'
             },
             states: {
-                prompt: {
+                get_result: {
+                    entry: say(""), // placeholder for kbRequest
+                    on: { ENDSPEECH: 'tell_result' }
+                    //src: (context, event) => kbRequest("something"),
+                    //onDone: 'tell_result',
+                    //onError: 'tell_result',
+                },
+                tell_result: {
                     entry: send((context: SDSContext) => ({
                         type: 'SPEAK',
                         value: `${context.name} is 1 2 3 ... Do you want to meet them?`
@@ -432,6 +442,3 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
         }
     }
 })
-
-const kbRequest = (text: string) =>
-    fetch(new Request(`https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`)).then(data => data.json())
