@@ -24,10 +24,32 @@ const grammar: { [index: string]: { title?: string, day?: string, time?: string,
     "At 14": { time: "14:00" },
     "At 15": { time: "15:00" },
     "At 16": { time: "16:00" },
-    "Yes.": {acknowledge: "Yes"},
-    "No.": {acknowledge: "No"},
-    "Of course.": {acknowledge: "Yes"},
-    "No way.": {acknowledge: "No"},
+
+    "Yes.": { acknowledge: "Yes" },
+    "No.": { acknowledge: "No" },
+    "Of course.": { acknowledge: "Yes" },
+    "No way.": { acknowledge: "No" },
+}
+
+function check_yes(text: string): boolean {
+    return text === "Yes." || text === "Of course.";
+}
+
+function check_no(text: string): boolean {
+    return text === "No." || text === "No way.";
+}
+
+function check_create_meeting(text: string): boolean {
+    return (text === "Create a meeting.");
+}
+
+function parse_whois(text: string): string {
+    if (text.startsWith("Who is ") && text.endsWith("?")) {
+        const name = text.substring(7, text.length-1);
+        return name!;
+    }
+    else
+        return "";
 }
 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
@@ -40,8 +62,108 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
         },
         init: {
             on: {
-                TTS_READY: 'intro',
-                CLICK: 'intro'
+                TTS_READY: 'login',
+                CLICK: 'login'
+            }
+        },
+        login: {
+            initial: 'prompt',
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'ask_whattodo',
+                        actions: assign({ username: (context) => context.recResult[0].utterance! })
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ],
+                TIMEOUT: '.prompt'
+            },
+            states: {
+                prompt: {
+                    entry: say("What is your name?"),
+                    on: { ENDSPEECH: 'login_user' }
+                },
+                login_user: {
+                    entry: send('LISTEN')
+				},
+                nomatch: {
+                    entry: say("Sorry, I don't know what it is. Tell me your name."),
+                    on: { ENDSPEECH: 'login_user' }
+                }
+            }
+        },
+        ask_whattodo: {
+            initial: 'prompt',
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'intro',
+                        cond: (context) => check_create_meeting(context.recResult[0].utterance),
+                    },
+                    {
+                        target: 'check_whois',
+                        cond: (context) => parse_whois(context.recResult[0].utterance) != "",
+                        actions: assign({ name: (context) => parse_whois(context.recResult[0].utterance) })
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ],
+                TIMEOUT: '.prompt'
+            },
+            states: {
+                prompt: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: `Hi, ${context.username}! What do you want to do?`
+                    })),
+                    on: { ENDSPEECH: 'select_whattodo' }
+                },
+                select_whattodo: {
+                    entry: send('LISTEN')
+				},
+                nomatch: {
+                    entry: say("Sorry, I don't know what it is. You can create a meeting or ask who is."),
+                    on: { ENDSPEECH: 'select_whattodo' }
+                }
+            }
+        },
+        check_whois: {
+            initial: 'prompt',
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'info_meeting',
+                        cond: (context) => check_yes(context.recResult[0].utterance),
+                        actions: assign({ title: (context) => `Meeting with ${context.name}` })
+                    },
+                    {
+                        target: 'ask_whattodo',
+                        cond: (context) => check_no(context.recResult[0].utterance),
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ],
+                TIMEOUT: '.prompt'
+            },
+            states: {
+                prompt: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: `${context.name} is 1 2 3 ... Do you want to meet them?`
+                    })),
+                    on: { ENDSPEECH: 'select_whattodo' }
+                },
+                select_whattodo: {
+                    entry: send('LISTEN')
+				},
+                nomatch: {
+                    entry: say("Sorry, I don't know what it is. Say yes or no."),
+                    on: { ENDSPEECH: 'select_whattodo' }
+                }
             }
         },
         intro: {
