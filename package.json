@@ -2,8 +2,9 @@
   "name": "speechstate",
     "version": "0.1.0",
     "license": "GPL-3.0",
-  "homepage": "http://localhost/speechstate-lt2216",
-  "private": true,
+    "homepage": "https://charlottesbrev.github.io/speechstate-lt2216",
+    "homepage_old": "http://localhost/speechstate-lt2216",
+    "private": true,
   "dependencies": {
     "@testing-library/jest-dom": "^5.14.1",
     "@testing-library/react": "^12.0.0",
