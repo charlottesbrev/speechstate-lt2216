@@ -1,4 +1,5 @@
 import { MachineConfig, send, Action, assign } from "xstate";
+import { Machine, createMachine, interpret } from 'xstate';
 
 function say(text: string): Action<SDSContext, SDSEvent> {
     return send((_context: SDSContext) => ({ type: "SPEAK", value: text }))
@@ -53,7 +54,7 @@ function parse_whois(text: string): string {
 }
 
 const kbRequest = (text: string) =>
-    fetch(new Request(`https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`)).then(data => data.json())
+    fetch(new Request(`https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1&l=us_en`)).then(data => data.json())
 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
     initial: 'idle',
@@ -154,16 +155,32 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             },
             states: {
                 get_result: {
-                    entry: say(""), // placeholder for kbRequest
-                    on: { ENDSPEECH: 'tell_result' }
-                    //src: (context, event) => kbRequest("something"),
-                    //onDone: 'tell_result',
-                    //onError: 'tell_result',
+                    invoke: {
+                        id: 'getPerson',
+                        src: (context, event) => kbRequest(context.name),
+                        onDone: {
+                            target: 'tell_result',
+                            actions: assign({ nameinfo: (context, event) => {
+                                console.log(event.data);
+                                let x : string = event.data.Abstract!;
+                                if (x === "") {
+                                    x = event.data.RelatedTopics[0].Text!; 
+                                }
+                                //console.log(x);
+                                return x;
+                                }
+                            })
+                        },
+                        onError: {
+                            target: 'nomatch',
+                            actions: assign({ error: (context, event) => event.data })
+                        }
+                    }
                 },
                 tell_result: {
                     entry: send((context: SDSContext) => ({
                         type: 'SPEAK',
-                        value: `${context.name} is 1 2 3 ... Do you want to meet them?`
+                        value: `${context.nameinfo}. Do you want to meet them?`
                     })),
                     on: { ENDSPEECH: 'select_whattodo' }
                 },

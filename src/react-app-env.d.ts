@@ -44,6 +44,8 @@ interface SDSContext {
     username: string;
 
     name: string;
+    nameinfo: string;
+    error: string;
 }
 
 type SDSEvent =
