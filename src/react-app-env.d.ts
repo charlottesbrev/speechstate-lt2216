@@ -60,4 +60,5 @@ type SDSEvent =
     | { type: 'ENDSPEECH' }
     | { type: 'LISTEN' }
     | { type: 'TIMEOUT' }
+    | { type: 'HELPME' }
     | { type: 'SPEAK', value: string };
