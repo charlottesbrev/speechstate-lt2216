@@ -46,6 +46,9 @@ interface SDSContext {
     name: string;
     nameinfo: string;
     error: string;
+
+    sentenceCounter: number;
+    sentences: string[];
 }
 
 type SDSEvent =

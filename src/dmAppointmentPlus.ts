@@ -67,11 +67,11 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
         init: {
             on: {
                 TTS_READY: 'login',
-                CLICK: 'login'
+                CLICK: { target: 'login', cond: (context) => { assign({ counter : 0}); return true; }}
             }
         },
         login: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -87,16 +87,41 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'init',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => ["What is your name?", "Please tell me your name.", "Tell me your name, for example Mark."]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
                     entry: say("This is some help 1."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
-                    entry: say("What is your name?"),
-                    on: { ENDSPEECH: 'login_user' }
+                    entry: [
+                        send((context: SDSContext) => ({
+                            type: 'SPEAK',
+                            value: context.sentences[context.sentenceCounter]
+                        }))
+                    ],
+                    on: {
+                        ENDSPEECH: {
+                            target: 'login_user',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 login_user: {
                     entry: send('LISTEN')
@@ -108,7 +133,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             }
         },
         ask_whattodo: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -129,19 +154,41 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'login',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => [`Hi, ${context.username}! What do you want to do?`, "You need to tell me what to do.", "You can say for example: Create a meeting."]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
-                    entry: say("This is some help 2."),
+                    entry: say("You can create a meeting, or ask who is X."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: `Hi, ${context.username}! What do you want to do? You can create a meeting, or ask who is X.`
-                    })),
-                    on: { ENDSPEECH: 'select_whattodo' }
+                    entry: [
+                        send((context: SDSContext) => ({
+                            type: 'SPEAK',
+                            value: context.sentences[context.sentenceCounter]
+                        }))
+                    ],
+                    on: {
+                        ENDSPEECH: {
+                            target: 'select_whattodo',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 select_whattodo: {
                     entry: send('LISTEN')
@@ -153,7 +200,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             }
         },
         check_whois: {
-            initial: 'get_result',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -174,9 +221,24 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'ask_whattodo',
-                TIMEOUT: '.get_result'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.ask_to_meet'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => ["Do you want to meet them?", "Do you want to meet them 2?", "Do you want to meet them 3?"]})
+                    ],
+                    always: 'get_result'
+                },
                 helpme: {
                     entry: say("This is some help 9."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
@@ -188,12 +250,11 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         onDone: {
                             target: 'tell_result',
                             actions: assign({ nameinfo: (context, event) => {
-                                console.log(event.data);
+                                //console.log(event.data);
                                 let x : string = event.data.Abstract!;
                                 if (x === "") {
                                     x = event.data.RelatedTopics[0].Text!; 
                                 }
-                                //console.log(x);
                                 return x;
                                 }
                             })
@@ -207,9 +268,21 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 tell_result: {
                     entry: send((context: SDSContext) => ({
                         type: 'SPEAK',
-                        value: `${context.nameinfo}. Do you want to meet them?`
+                        value: `${context.nameinfo}.`
                     })),
-                    on: { ENDSPEECH: 'select_whattodo' }
+                    on: { ENDSPEECH: 'ask_to_meet' }
+                },
+                ask_to_meet: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    })),
+                    on: {
+                        ENDSPEECH: {
+                            target: 'select_whattodo',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 select_whattodo: {
                     entry: send('LISTEN')
@@ -232,7 +305,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             }
         },
         welcome: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -249,16 +322,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'ask_whattodo',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => ["What is it about?", "What is it about 2?", "What is it about 3?"]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
                     entry: say("This is some help 3."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
-                    entry: say("What is it about?"),
-                    on: { ENDSPEECH: 'ask_meeting' }
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    })),
+                    on: {
+                        ENDSPEECH: {
+                            target: 'ask_meeting',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 ask_meeting: {
                     entry: send('LISTEN')
@@ -277,7 +373,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             on: { ENDSPEECH: 'weekday' }
         },
         weekday: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -294,16 +390,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'intro',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => ["On which day is it?", "On which day is it 2?", "On which day is it 3?"]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
                     entry: say("This is some help 4."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
-                    entry: say("On which day is it?"),
-                    on: { ENDSPEECH: 'ask_day' }
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    })),
+                    on: {
+                        ENDSPEECH: {
+                            target: 'ask_day',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 ask_day: {
                     entry: send('LISTEN')
@@ -322,7 +441,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             on: { ENDSPEECH: 'wholeday' }
         },
         wholeday: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -339,16 +458,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'weekday',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => ["Will it take the whole day?", "Will it take the whole day 2?", "Will it take the whole day 3?"]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
                     entry: say("This is some help 5."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
-                    entry: say("Will it take the whole day?"),
-                    on: { ENDSPEECH: 'waitfor_yesno' }
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    })),
+                    on: {
+                        ENDSPEECH: {
+                            target: 'waitfor_yesno',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 waitfor_yesno: {
                     entry: send('LISTEN')
@@ -374,7 +516,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 }] }
         },
         meeting_wholeday: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -391,18 +533,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'wholeday',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => [`Do you want me to create a meeting titled ${context.title} on ${context.day} for the whole day?`, "Do you want me to create the meeting?", "Please let me know if you want to create the meeting?"]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
                     entry: say("This is some help 6."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
                     entry: send((context: SDSContext) => ({
-                        type: "SPEAK", value: `Do you want me to create a meeting titled ${context.title} on ${context.day} for the whole day?`
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
                     })),
-                    on: { ENDSPEECH: 'waitfor_yesno' }
+                    on: {
+                        ENDSPEECH: {
+                            target: 'waitfor_yesno',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 waitfor_yesno: {
                     entry: send('LISTEN')
@@ -428,7 +591,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 }] }
         },
         timeofday: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -445,16 +608,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'meeting_wholeday',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => ["What time is your meeting?", "What time is your meeting 2?", "What time is your meeting 3?"]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
                     entry: say("This is some help 7."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
-                    entry: say("What time is your meeting?"),
-                    on: { ENDSPEECH: 'ask_time' }
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    })),
+                    on: {
+                        ENDSPEECH: {
+                            target: 'ask_time',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }
                 },
                 ask_time: {
                     entry: send('LISTEN')
@@ -473,7 +659,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             on: { ENDSPEECH: 'meeting_time' }
         },
         meeting_time: {
-            initial: 'prompt',
+            initial: 'reset',
             on: {
                 RECOGNISED: [
                     {
@@ -490,18 +676,43 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 ],
                 HELPME: 'meeting_wholeday',
-                TIMEOUT: '.prompt'
+                TIMEOUT: [
+                    {
+                        target: 'idle',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: '.prompt'
+                    }
+                ]
             },
             states: {
+                reset: {
+                    entry: [
+                        assign({ sentenceCounter: (context) => 0}),
+                        assign({ sentences: (context) => [`Do you want me to create a meeting titled ${context.title} on ${context.day} at ${context.time}?`, `Do you want the meeting ${context.title} on ${context.day} at ${context.time}?`, "Please tell if you want to create the meeting?"]})
+                    ],
+                    always: 'prompt'
+                },
                 helpme: {
                     entry: say("This is some help 8."),
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
                     entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    })),
+                    on: {
+                        ENDSPEECH: {
+                            target: 'waitfor_yesno',
+                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
+                        }
+                    }                    
+                    /*entry: send((context: SDSContext) => ({
                         type: "SPEAK", value: `Do you want me to create a meeting titled ${context.title} on ${context.day} at ${context.time}?`
                     })),
-                    on: { ENDSPEECH: 'waitfor_yesno' }
+                    on: { ENDSPEECH: 'waitfor_yesno' }*/
                 },
                 waitfor_yesno: {
                     entry: send('LISTEN')
