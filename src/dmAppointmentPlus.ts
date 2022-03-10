@@ -77,7 +77,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
                     { target: '.no' }
                 ],
-                COMPUTER_RIGHT: { target: 'set_login', actions: [ assign({recResult: (c) => c.saved}), assign({ username: (c) => c.saved[0].utterance}) ] },
+                COMPUTER_RIGHT: { target: 'set_login', actions: [ assign({recResult: (c) => c.saved}) ] },
                 COMPUTER_WRONG: { target: 'login', actions: assign({recResult: (c) => c.saved}) },
                 TIMEOUT: '.repeat_question'
             },
@@ -91,7 +91,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     }
                 },
                 repeat_question: {
-                    entry: [(c)=>console.log(c.saved), send((context) => ({
+                    entry: [send((context) => ({
                         type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
                     }))],
                     on: {
@@ -142,12 +142,10 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     on: { ENDSPEECH: {actions:send('HELPME')} }
                 },
                 prompt: {
-                    entry: [
-                        send((context: SDSContext) => ({
+                    entry: [send((context: SDSContext) => ({
                             type: 'SPEAK',
                             value: context.sentences[context.sentenceCounter]
-                        }))
-                    ],
+                    }))],
                     on: {
                         ENDSPEECH: {
                             target: 'login_user',
@@ -176,6 +174,53 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 }
             }
         },
+        unsure_of_ask_whattodo: {
+            initial: 'first_question',
+            on: {
+                RECOGNISED: [
+                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
+                    { target: '.no' }
+                ],
+                COMPUTER_RIGHT: [
+                    {
+                        target: 'intro',
+                        cond: (context) => check_create_meeting(context.saved[0].utterance),
+                        actions: [ assign({recResult: (c) => c.saved}) ]
+                    },
+                    {
+                        target: 'check_whois',
+                        cond: (context) => parse_whois(context.saved[0].utterance) !== "",
+                        actions: [ assign({ name: (context) => parse_whois(context.saved[0].utterance) }), assign({recResult: (c) => c.saved})]
+                    },
+                    {
+                        target: 'ask_whattodo.nomatch',
+                        actions: [ assign({recResult: (c) => c.saved}) ]
+                    }
+                ],
+                COMPUTER_WRONG: { target: 'ask_whattodo', actions: assign({recResult: (c) => c.saved}) },
+                TIMEOUT: '.repeat_question'
+            },
+            states: {
+                first_question: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
+                    })),
+                    on: {
+                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
+                    }
+                },
+                repeat_question: {
+                    entry: [send((context) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
+                    }))],
+                    on: {
+                        ENDSPEECH: { actions: send('LISTEN') }
+                    }
+                },
+                yes: { entry: send('COMPUTER_RIGHT') },
+                no: { entry: send('COMPUTER_WRONG') }
+            }
+        },
         ask_whattodo: {
             initial: 'reset',
             on: {
@@ -183,6 +228,10 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     {
                         target: '.helpme',
                         cond: (context) => context.recResult[0].utterance! === "Help."
+                    },
+                    {
+                        target: 'unsure_of_ask_whattodo',
+                        cond: (context) => context.recResult[0].confidence < context.threshold
                     },
                     {
                         target: 'intro',
