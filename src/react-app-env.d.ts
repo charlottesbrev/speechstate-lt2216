@@ -49,6 +49,10 @@ interface SDSContext {
 
     sentenceCounter: number;
     sentences: string[];
+
+    threshold: number;
+
+    saved: Hypothesis[];
 }
 
 type SDSEvent =
@@ -63,5 +67,8 @@ type SDSEvent =
     | { type: 'ENDSPEECH' }
     | { type: 'LISTEN' }
     | { type: 'TIMEOUT' }
+    | { type: 'SPEAK', value: string }
     | { type: 'HELPME' }
-    | { type: 'SPEAK', value: string };
+    | { type: 'COMPUTER_RIGHT' }
+    | { type: 'COMPUTER_WRONG' }
+    | { type: 'JUMP' };

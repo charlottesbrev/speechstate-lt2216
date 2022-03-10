@@ -1,4 +1,4 @@
-import { MachineConfig, send, Action, assign } from "xstate";
+import { MachineConfig, send, Action, assign, actions } from "xstate";
 import { Machine, createMachine, interpret } from 'xstate';
 
 function say(text: string): Action<SDSContext, SDSEvent> {
@@ -61,13 +61,45 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
     states: {
         idle: {
             on: {
-                CLICK: 'init'
+                CLICK: { target: 'init', actions: assign({ threshold : (context) => 0.8}) }
             }
         },
         init: {
             on: {
                 TTS_READY: 'login',
-                CLICK: { target: 'login', cond: (context) => { assign({ counter : 0}); return true; }}
+                CLICK: 'login'
+            }
+        },
+        unsure_of_login: {
+            initial: 'first_question',
+            on: {
+                RECOGNISED: [
+                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
+                    { target: '.no' }
+                ],
+                COMPUTER_RIGHT: { target: 'set_login', actions: [ assign({recResult: (c) => c.saved}), assign({ username: (c) => c.saved[0].utterance}) ] },
+                COMPUTER_WRONG: { target: 'login', actions: assign({recResult: (c) => c.saved}) },
+                TIMEOUT: '.repeat_question'
+            },
+            states: {
+                first_question: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
+                    })),
+                    on: {
+                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
+                    }
+                },
+                repeat_question: {
+                    entry: [(c)=>console.log(c.saved), send((context) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
+                    }))],
+                    on: {
+                        ENDSPEECH: { actions: send('LISTEN') }
+                    }
+                },
+                yes: { entry: send('COMPUTER_RIGHT') },
+                no: { entry: send('COMPUTER_WRONG') }
             }
         },
         login: {
@@ -79,11 +111,11 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         cond: (context) => context.recResult[0].utterance! === "Help."
                     },
                     {
-                        target: 'ask_whattodo',
-                        actions: assign({ username: (context) => context.recResult[0].utterance! })
+                        target: 'unsure_of_login',
+                        cond: (context) => context.recResult[0].confidence < context.threshold
                     },
                     {
-                        target: '.nomatch'
+                        target: 'set_login'
                     }
                 ],
                 HELPME: 'init',
@@ -129,6 +161,18 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 nomatch: {
                     entry: say("Sorry, I don't know what it is. Tell me your name."),
                     on: { ENDSPEECH: 'login_user' }
+                }
+            }
+        },
+        set_login: {
+            initial: 'setup',
+            on: {
+                JUMP: 'ask_whattodo'
+            },
+            states: {
+                setup: {
+                    entry: [assign({ username: (context) => context.recResult[0].utterance! }), say("")],
+                    on: { ENDSPEECH: { actions: send('JUMP')} }
                 }
             }
         },
