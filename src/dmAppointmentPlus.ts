@@ -397,6 +397,48 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 },
             }
         },
+        unsure_of_welcome: {
+            initial: 'first_question',
+            on: {
+                RECOGNISED: [
+                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
+                    { target: '.no' }
+                ],
+                COMPUTER_RIGHT: [
+                    {
+                        target: 'info_meeting',
+                        cond: (context) => "title" in (grammar[context.saved[0].utterance] || {}),
+                        actions: [ assign({recResult: (c) => c.saved}), assign({ title: (c) => grammar[c.saved[0].utterance].title! }) ]
+                    },
+                    {
+                        target: 'welcome.nomatch',
+                        actions: [ assign({recResult: (c) => c.saved}) ]
+                    }
+                ],
+                COMPUTER_WRONG: { target: 'welcome', actions: assign({recResult: (c) => c.saved}) },
+                TIMEOUT: '.repeat_question'
+            },
+            states: {
+                first_question: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
+                    })),
+                    on: {
+                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
+                    }
+                },
+                repeat_question: {
+                    entry: [send((context) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
+                    }))],
+                    on: {
+                        ENDSPEECH: { actions: send('LISTEN') }
+                    }
+                },
+                yes: { entry: send('COMPUTER_RIGHT') },
+                no: { entry: send('COMPUTER_WRONG') }
+            }
+        },
         welcome: {
             initial: 'reset',
             on: {
@@ -404,6 +446,10 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     {
                         target: '.helpme',
                         cond: (context) => context.recResult[0].utterance! === "Help."
+                    },
+                    {
+                        target: 'unsure_of_welcome',
+                        cond: (context) => context.recResult[0].confidence < context.threshold
                     },
                     {
                         target: 'info_meeting',
@@ -465,6 +511,48 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             })),
             on: { ENDSPEECH: 'weekday' }
         },
+        unsure_of_weekday: {
+            initial: 'first_question',
+            on: {
+                RECOGNISED: [
+                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
+                    { target: '.no' }
+                ],
+                COMPUTER_RIGHT: [
+                    {
+                        target: 'info_weekday',
+                        cond: (context) => "day" in (grammar[context.saved[0].utterance] || {}),
+                        actions: [ assign({recResult: (c) => c.saved}), assign({ day: (c) => grammar[c.saved[0].utterance].day! }) ]
+                    },
+                    {
+                        target: 'weekday.nomatch',
+                        actions: [ assign({recResult: (c) => c.saved}) ]
+                    }
+                ],
+                COMPUTER_WRONG: { target: 'weekday', actions: assign({recResult: (c) => c.saved}) },
+                TIMEOUT: '.repeat_question'
+            },
+            states: {
+                first_question: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
+                    })),
+                    on: {
+                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
+                    }
+                },
+                repeat_question: {
+                    entry: [send((context) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
+                    }))],
+                    on: {
+                        ENDSPEECH: { actions: send('LISTEN') }
+                    }
+                },
+                yes: { entry: send('COMPUTER_RIGHT') },
+                no: { entry: send('COMPUTER_WRONG') }
+            }
+        },
         weekday: {
             initial: 'reset',
             on: {
@@ -472,6 +560,10 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     {
                         target: '.helpme',
                         cond: (context) => context.recResult[0].utterance! === "Help."
+                    },
+                    {
+                        target: 'unsure_of_weekday',
+                        cond: (context) => context.recResult[0].confidence < context.threshold
                     },
                     {
                         target: 'info_weekday',
@@ -679,9 +771,51 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     cond: (context) => context.acknowledge === "Yes"
                 },
                 {
-                    target: 'welcome',
+                    target: 'ask_whattodo',
                     cond: (context) => context.acknowledge === "No"
                 }] }
+        },
+        unsure_of_timeofday: {
+            initial: 'first_question',
+            on: {
+                RECOGNISED: [
+                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
+                    { target: '.no' }
+                ],
+                COMPUTER_RIGHT: [
+                    {
+                        target: 'info_timeofday',
+                        cond: (context) => "time" in (grammar[context.saved[0].utterance] || {}),
+                        actions: [assign({recResult: (c) => c.saved}), assign({ time: (c) => grammar[c.saved[0].utterance].time! })]
+                    },
+                    {
+                        target: 'timeofday.nomatch',
+                        actions: [ assign({recResult: (c) => c.saved}) ]
+                    }
+                ],
+                COMPUTER_WRONG: { target: 'timeofday', actions: assign({recResult: (c) => c.saved}) },
+                TIMEOUT: '.repeat_question'
+            },
+            states: {
+                first_question: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
+                    })),
+                    on: {
+                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
+                    }
+                },
+                repeat_question: {
+                    entry: [send((context) => ({
+                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
+                    }))],
+                    on: {
+                        ENDSPEECH: { actions: send('LISTEN') }
+                    }
+                },
+                yes: { entry: send('COMPUTER_RIGHT') },
+                no: { entry: send('COMPUTER_WRONG') }
+            }
         },
         timeofday: {
             initial: 'reset',
@@ -690,6 +824,10 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     {
                         target: '.helpme',
                         cond: (context) => context.recResult[0].utterance! === "Help."
+                    },
+                    {
+                        target: 'unsure_of_timeofday',
+                        cond: (context) => context.recResult[0].confidence < context.threshold
                     },
                     {
                         target: 'info_timeofday',
@@ -801,11 +939,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             target: 'waitfor_yesno',
                             actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
                         }
-                    }                    
-                    /*entry: send((context: SDSContext) => ({
-                        type: "SPEAK", value: `Do you want me to create a meeting titled ${context.title} on ${context.day} at ${context.time}?`
-                    })),
-                    on: { ENDSPEECH: 'waitfor_yesno' }*/
+                    }
                 },
                 waitfor_yesno: {
                     entry: send('LISTEN')
@@ -826,7 +960,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     cond: (context) => context.acknowledge === "Yes"
                 },
                 {
-                    target: 'welcome',
+                    target: 'ask_whattodo',
                     cond: (context) => context.acknowledge === "No"
                 }] }
         },
