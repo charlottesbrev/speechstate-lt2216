@@ -53,6 +53,12 @@ interface SDSContext {
     threshold: number;
 
     saved: Hypothesis[];
+
+    is_starting: string;
+    turn: string;
+    pickNumberOfMatches: number;
+    numberOfMatches: number;
+    maxPick: number;
 }
 
 type SDSEvent =
