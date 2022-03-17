@@ -36,26 +36,22 @@ interface SDSContext {
     azureAuthorizationToken: string;
     audioCtx: any;
 
-    title: string;
-    day: string;
-    time: string;
-    acknowledge: string;
-
-    username: string;
-
-    name: string;
-    nameinfo: string;
     error: string;
 
     sentenceCounter: number;
     sentences: string[];
 
-    threshold: number;
+    acknowledge: string;
+    username: string;
 
+    threshold: number;
     saved: Hypothesis[];
 
-    is_starting: string;
+    isStarting: string;
     turn: string;
+
+    selectedMatches: string;
+
     pickNumberOfMatches: number;
     numberOfMatches: number;
     maxPick: number;
