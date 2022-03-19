@@ -4,50 +4,49 @@ function say(text: string): Action<SDSContext, SDSEvent> {
     return send((_context: SDSContext) => ({ type: "SPEAK", value: text }))
 }
 
-const grammar: { [index: string]: { acknowledge?:string, isStarting?:string, selectedMatches?:string } } = {
+const grammar: { [index: string]: { acknowledge?:string, isStarting?:string, selectedMatches?:number } } = {
+    "Yes.": { acknowledge: "yes" },
+    "No.": { acknowledge: "no" },
+    "Of course.": { acknowledge: "yes" },
+    "No way.": { acknowledge: "no" },
+
     "You": { isStarting: "computer" },
     "You can start.": { isStarting: "computer" },
     "I.": { isStarting: "player" },
     "I want to start.": { isStarting: "player" },
 
-    "Yes.": { acknowledge: "Yes" },
-    "No.": { acknowledge: "No" },
-    "Of course.": { acknowledge: "Yes" },
-    "No way.": { acknowledge: "No" },
+    "One.": { selectedMatches: 1 },
+    "1.": { selectedMatches: 1 },
+    "One match.": { selectedMatches: 1 },
+    "One stick.": { selectedMatches: 1 },
+    "I pick one.": { selectedMatches: 1 },
+    "I pick one match.": { selectedMatches: 1 },
+    "I pick one stick.": { selectedMatches: 1 },
+    "I take one.": { selectedMatches: 1 },
+    "I take one match.": { selectedMatches: 1 },
+    "I take one stick.": { selectedMatches: 1 },
 
+    "Two.": { selectedMatches: 2 },
+    "2.": { selectedMatches: 2 },
+    "Two matches.": { selectedMatches: 2 },
+    "Two sticks.": { selectedMatches: 2 },
+    "I pick two.": { selectedMatches: 2 },
+    "I pick two matches.": { selectedMatches: 2 },
+    "I pick two sticks.": { selectedMatches: 2 },
+    "I take two.": { selectedMatches: 2 },
+    "I take two matches.": { selectedMatches: 2 },
+    "I take two sticks.": { selectedMatches: 2 },
 
-    "One.": { selectedMatches: "1" },
-    "1.": { selectedMatches: "1" },
-    "One match.": { selectedMatches: "1" },
-    "One stick.": { selectedMatches: "1" },
-    "I pick one.": { selectedMatches: "1" },
-    "I pick one match.": { selectedMatches: "1" },
-    "I pick one stick.": { selectedMatches: "1" },
-    "I take one.": { selectedMatches: "1" },
-    "I take one match.": { selectedMatches: "1" },
-    "I take one stick.": { selectedMatches: "1" },
-
-    "Two.": { selectedMatches: "2" },
-    "2.": { selectedMatches: "2" },
-    "Two matches.": { selectedMatches: "2" },
-    "Two sticks.": { selectedMatches: "2" },
-    "I pick two.": { selectedMatches: "2" },
-    "I pick two matches.": { selectedMatches: "2" },
-    "I pick two sticks.": { selectedMatches: "2" },
-    "I take two.": { selectedMatches: "2" },
-    "I take two matches.": { selectedMatches: "2" },
-    "I take two sticks.": { selectedMatches: "2" },
-
-    "Three.": { selectedMatches: "3" },
-    "3.": { selectedMatches: "3" },
-    "Three matches.": { selectedMatches: "3" },
-    "Three sticks.": { selectedMatches: "3" },
-    "I pick three.": { selectedMatches: "3" },
-    "I pick three matches.": { selectedMatches: "3" },
-    "I pick three sticks.": { selectedMatches: "3" },
-    "I take three.": { selectedMatches: "3" },
-    "I take three matches.": { selectedMatches: "3" },
-    "I take three sticks.": { selectedMatches: "3" }
+    "Three.": { selectedMatches: 3 },
+    "3.": { selectedMatches: 3 },
+    "Three matches.": { selectedMatches: 3 },
+    "Three sticks.": { selectedMatches: 3 },
+    "I pick three.": { selectedMatches: 3 },
+    "I pick three matches.": { selectedMatches: 3 },
+    "I pick three sticks.": { selectedMatches: 3 },
+    "I take three.": { selectedMatches: 3 },
+    "I take three matches.": { selectedMatches: 3 },
+    "I take three sticks.": { selectedMatches: 3 }
 }
 
 function check_yes(text: string): boolean {
@@ -474,7 +473,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             states: {
                 start: {
                     entry: send((context: SDSContext) => ({
-                        type: 'SPEAK', value: `I did not understand that choice, ${context.username}.`
+                        type: 'SPEAK', value: `I did not understand your choice, ${context.username}.`
                     })),
                 },
             }
@@ -511,17 +510,17 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 JUMP: [
                     {
                         target: 'check_winner',
-                        cond: (context) =>  (context.maxPick >= 1 && context.selectedMatches === "1"),
+                        cond: (context) =>  (context.maxPick >= 1 && context.selectedMatches === 1),
                         actions: assign({ pickNumberOfMatches: (context) => 1 })
                     },
                     {
                         target: 'check_winner',
-                        cond: (context) =>  (context.maxPick >= 2 && context.selectedMatches === "2"),
+                        cond: (context) =>  (context.maxPick >= 2 && context.selectedMatches === 2),
                         actions: assign({ pickNumberOfMatches: (context) => 2 })
                     },
                     {
                         target: 'check_winner',
-                        cond: (context) =>  (context.maxPick === 3 && context.selectedMatches === "3"),
+                        cond: (context) =>  (context.maxPick === 3 && context.selectedMatches === 3),
                         actions: assign({ pickNumberOfMatches: (context) => 3 })
                     },
                     {
@@ -539,7 +538,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 JUMP: [
                     {
                         target: 'player_can_pick_1',
-                        cond: (context) => context.selectedMatches === "1",
+                        cond: (context) => context.selectedMatches === 1,
                         actions: send((context: SDSContext) => ({
                             type: 'SPEAK', value: `You picked ${context.selectedMatches} match but can only pick ${context.maxPick}.`
                         }))
@@ -584,6 +583,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                 start: { entry: [ assign({turn: (context) => "player" }), send('JUMP') ] }
             }
         },
+
         check_winner: {
             initial: 'start',
             on: {
@@ -605,7 +605,20 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         cond: (context) => context.turn === "computer",
                     }
                 ],
-                ENDSPEECH: {actions: send('JUMP')},
+                SAY_MATCHES_LEFT: [
+                    {
+                        cond: (context) => context.numberOfMatches === 1,
+                        actions: send((context: SDSContext) => ({
+                            type: 'SPEAK', value: `There is only ${context.numberOfMatches} match left.`
+                        }))
+                    },
+                    {
+                        actions: send((context: SDSContext) => ({
+                            type: 'SPEAK', value: `There are ${context.numberOfMatches} matches left.`
+                        }))
+                    }
+                ],
+                ENDSPEECH: { actions: send('JUMP') }
             },
             states: {
                 start: {
@@ -617,46 +630,76 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             else
                                 return 3;
                             }}),
-                        (context) => {console.log(`maxPick set to: ${context.maxPick}`)},
-                        send((context: SDSContext) => ({
-                            type: 'SPEAK', value: `There are ${context.numberOfMatches} matches left.`
-                        })),
+                        send('SAY_MATCHES_LEFT')
                     ]
                 }
             }
         },
         computer_wins: {
             initial: 'start',
-            on: { ENDSPEECH: 'who_starts'},
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'who_starts',
+                        cond: (context) => check_yes(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'goodbye',
+                        cond: (context) => check_no(context.recResult[0].utterance)
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ]
+            },
             states: {
                 start: {
                     entry: say(`I won!
-                            Would you like a revenge?`)
+                            Would you like a revenge?`),
+                    on: { ENDSPEECH: { actions: send('LISTEN') } }
+                },
+                nomatch: {
+                    entry: say(`I did not understand that, please say yes or no.`),
+                    on: { ENDSPEECH: { actions: send('LISTEN') } }
                 }
             }
         },
         player_wins: {
             initial: 'start',
-            on: { ENDSPEECH: 'who_starts'},
+            on: {
+                RECOGNISED: [
+                    {
+                        target: 'who_starts',
+                        cond: (context) => check_yes(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'goodbye',
+                        cond: (context) => check_no(context.recResult[0].utterance)
+                    },
+                    {
+                        target: '.nomatch'
+                    }
+                ]
+            },
             states: {
                 start: {
                     entry: send((context: SDSContext) => ({
                         type: 'SPEAK', value: `Congratulations ${context.username}! You won!
                                                 Do you want to play another game?`
-                    }))
+                    })),
+                    on: { ENDSPEECH: { actions: send('LISTEN') } }
+                },
+                nomatch: {
+                    entry: say(`I did not understand that, please say yes or no.`),
+                    on: { ENDSPEECH: { actions: send('LISTEN') } }
                 }
             }
         },
-        done: {
+        goodbye: {
             initial: 'prompt',
+            on: { ENDSPEECH: 'init' },
             states: {
-                prompt: {
-                    entry: say("Your meeting has been created"),
-                    on: { ENDSPEECH: 'stop' }
-                },
-                stop: {
-                    type: 'final'
-                }
+                prompt: { entry: say("Thank you for playing the game.") }
             }
         }
     }

@@ -50,7 +50,7 @@ interface SDSContext {
     isStarting: string;
     turn: string;
 
-    selectedMatches: string;
+    selectedMatches: number;
 
     pickNumberOfMatches: number;
     numberOfMatches: number;
@@ -73,4 +73,5 @@ type SDSEvent =
     | { type: 'HELPME' }
     | { type: 'COMPUTER_RIGHT' }
     | { type: 'COMPUTER_WRONG' }
+    | { type: 'SAY_MATCHES_LEFT' }
     | { type: 'JUMP' };
