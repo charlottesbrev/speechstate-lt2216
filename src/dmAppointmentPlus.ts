@@ -54,7 +54,16 @@ function parse_whois(text: string): string {
 }
 
 const kbRequest = (text: string) =>
-    fetch(new Request(`https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1&l=us_en`)).then(data => data.json())
+    fetch(new Request(
+        `https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1&l=us_en`
+        )).then(data => data.json())
+
+const rasaurl = 'https://lt2216-v22-charlotte.herokuapp.com/model/parse'
+const nluRequest = (text: string) =>
+  fetch(new Request(rasaurl, {
+      method: 'POST',
+      body: `{"text": "${text}"}`
+  })).then(data => data.json());
 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
     initial: 'idle',
