@@ -55,6 +55,10 @@ interface SDSContext {
     pickNumberOfMatches: number;
     numberOfMatches: number;
     maxPick: number;
+
+    user_intent: string;
+    interpreted_intent: string;
+    interpreted_confidence: number;
 }
 
 type SDSEvent =

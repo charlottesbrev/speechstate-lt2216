@@ -1,3 +1,4 @@
+import { Context } from "microsoft-cognitiveservices-speech-sdk/distrib/lib/src/common.speech/RecognizerConfig";
 import { MachineConfig, send, Action, assign, actions } from "xstate";
 import { Machine, createMachine, interpret } from 'xstate';
 
@@ -40,8 +41,12 @@ function check_no(text: string): boolean {
     return text === "No." || text === "No way.";
 }
 
-function check_create_meeting(text: string): boolean {
-    return (text === "Create a meeting.");
+function check_help(text: string): boolean {
+    return text === "Help.";
+}
+
+function simplify_text(text: string): string {
+   return text.replace('.', '').toLocaleLowerCase()
 }
 
 function parse_whois(text: string): string {
@@ -54,7 +59,16 @@ function parse_whois(text: string): string {
 }
 
 const kbRequest = (text: string) =>
-    fetch(new Request(`https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1&l=us_en`)).then(data => data.json())
+    fetch(new Request(
+        `https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1&l=us_en`
+        )).then(data => data.json())
+
+const rasaurl = 'https://lt2216-v22-charlotte.herokuapp.com/model/parse'
+const nluRequest = (text: string) =>
+  fetch(new Request(rasaurl, {
+      method: 'POST',
+      body: `{"text": "${text}"}`
+  })).then(data => data.json());
 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
     initial: 'idle',
@@ -66,915 +80,364 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
         },
         init: {
             on: {
-                TTS_READY: 'login',
-                CLICK: 'login'
+                TTS_READY: 'assistant_welcome',
+                CLICK: 'assistant_welcome'
             }
         },
-        unsure_of_login: {
-            initial: 'first_question',
-            on: {
-                RECOGNISED: [
-                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
-                    { target: '.no' }
-                ],
-                COMPUTER_RIGHT: { target: 'set_login', actions: [ assign({recResult: (c) => c.saved}) ] },
-                COMPUTER_WRONG: { target: 'login', actions: assign({recResult: (c) => c.saved}) },
-                TIMEOUT: '.repeat_question'
-            },
-            states: {
-                first_question: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
-                    })),
-                    on: {
-                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
-                    }
-                },
-                repeat_question: {
-                    entry: [send((context) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
-                    }))],
-                    on: {
-                        ENDSPEECH: { actions: send('LISTEN') }
-                    }
-                },
-                yes: { entry: send('COMPUTER_RIGHT') },
-                no: { entry: send('COMPUTER_WRONG') }
-            }
+        assistant_welcome: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_assistant_questions' },
+            states: { prompt: { entry: say("Welcome to the assistant robot") } }
         },
-        login: {
-            initial: 'reset',
-            on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'unsure_of_login',
-                        cond: (context) => context.recResult[0].confidence < context.threshold
-                    },
-                    {
-                        target: 'set_login'
-                    }
-                ],
-                HELPME: 'init',
-                TIMEOUT: [
-                    {
-                        target: 'idle',
-                        cond: (context) => context.sentenceCounter >= context.sentences.length
-                    },
-                    {
-                        target: '.prompt'
-                    }
-                ]
-            },
-            states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => ["What is your name?", "Please tell me your name.", "Tell me your name, for example Mark."]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("This is some help 1."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
-                prompt: {
-                    entry: [send((context: SDSContext) => ({
-                            type: 'SPEAK',
-                            value: context.sentences[context.sentenceCounter]
-                    }))],
-                    on: {
-                        ENDSPEECH: {
-                            target: 'login_user',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                login_user: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is. Tell me your name."),
-                    on: { ENDSPEECH: 'login_user' }
-                }
-            }
-        },
-        set_login: {
+        reset_assistant_questions: {
             initial: 'setup',
-            on: {
-                JUMP: 'ask_whattodo'
-            },
+            on: { JUMP: 'assistant_question' },
             states: {
                 setup: {
-                    entry: [assign({ username: (context) => context.recResult[0].utterance! }), say("")],
-                    on: { ENDSPEECH: { actions: send('JUMP')} }
+                    entry: [
+                        assign({ sentenceCounter: (c) => 0 }),
+                        assign({ sentences: (c) => ["What do you want me to do?", "Please tell me what I shall do.", "Tell me what to do, for example: Cleanup the trash."] }),
+                        send('JUMP')
+                    ]
                 }
             }
         },
-        unsure_of_ask_whattodo: {
-            initial: 'first_question',
+        assistant_question: {
+            initial: 'prompt',
             on: {
-                RECOGNISED: [
-                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
-                    { target: '.no' }
-                ],
-                COMPUTER_RIGHT: [
-                    {
-                        target: 'intro',
-                        cond: (context) => check_create_meeting(context.saved[0].utterance),
-                        actions: [ assign({recResult: (c) => c.saved}) ]
-                    },
-                    {
-                        target: 'check_whois',
-                        cond: (context) => parse_whois(context.saved[0].utterance) !== "",
-                        actions: [ assign({ name: (context) => parse_whois(context.saved[0].utterance) }), assign({recResult: (c) => c.saved})]
-                    },
-                    {
-                        target: 'ask_whattodo.nomatch',
-                        actions: [ assign({recResult: (c) => c.saved}) ]
-                    }
-                ],
-                COMPUTER_WRONG: { target: 'ask_whattodo', actions: assign({recResult: (c) => c.saved}) },
-                TIMEOUT: '.repeat_question'
+                ENDSPEECH: { target: 'assistant_listen_what_todo', actions: assign({sentenceCounter: (c) => c.sentenceCounter + 1})}
             },
             states: {
-                first_question: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
-                    })),
-                    on: {
-                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
-                    }
-                },
-                repeat_question: {
-                    entry: [send((context) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
-                    }))],
-                    on: {
-                        ENDSPEECH: { actions: send('LISTEN') }
-                    }
-                },
-                yes: { entry: send('COMPUTER_RIGHT') },
-                no: { entry: send('COMPUTER_WRONG') }
-            }
+                prompt: {
+                    entry:
+                    send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    }))
+                } }
         },
-        ask_whattodo: {
-            initial: 'reset',
+        assistant_listen_what_todo: {
+            initial: 'listen',
             on: {
                 RECOGNISED: [
                     {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
+                        target: 'say_help_1',
+                        cond: (context) => check_help(context.recResult[0].utterance)
                     },
                     {
-                        target: 'unsure_of_ask_whattodo',
-                        cond: (context) => context.recResult[0].confidence < context.threshold
+                        target: 'uncertain_reset_what_todo',
+                        cond: (context) => context.recResult[0].confidence < context.threshold,
+                        actions: [assign({user_intent : (context) => simplify_text(context.recResult[0].utterance)})]
                     },
                     {
-                        target: 'intro',
-                        cond: (context) => check_create_meeting(context.recResult[0].utterance),
-                    },
-                    {
-                        target: 'check_whois',
-                        cond: (context) => parse_whois(context.recResult[0].utterance) !== "",
-                        actions: assign({ name: (context) => parse_whois(context.recResult[0].utterance) })
-                    },
-                    {
-                        target: '.nomatch'
+                        target: 'check_intent',
+                        actions: [assign({user_intent : (context) => simplify_text(context.recResult[0].utterance)})]
                     }
                 ],
-                HELPME: 'login',
                 TIMEOUT: [
                     {
-                        target: 'idle',
+                        target: 'say_goodbye',
                         cond: (context) => context.sentenceCounter >= context.sentences.length
                     },
                     {
-                        target: '.prompt'
+                        target: 'assistant_question'
                     }
                 ]
             },
             states: {
-                reset: {
+                listen: { entry: send('LISTEN') }
+            }
+        },
+        uncertain_reset_what_todo: {
+            initial: 'set_values',
+            on: { JUMP: 'uncertain_what_todo' },
+            states: {
+                set_values: {
                     entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => [`Hi, ${context.username}! What do you want to do?`, "You need to tell me what to do.", "You can say for example: Create a meeting."]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("You can create a meeting, or ask who is X."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
+                        assign({sentenceCounter: (context) => 0}),
+                        assign({sentences: (context) => [`Did you say: ${context.user_intent}?`, `I am not sure of what you said. Did you say: ${context.user_intent}?`, `Please answer, yes, if you said: ${context.user_intent}. If you did not say that answer with, no.`]}),
+                        send('JUMP')
+                    ]
+                }
+            }
+        },
+        uncertain_what_todo: {
+            initial: 'prompt',
+            on: {
+                ENDSPEECH: {
+                    target: 'uncertain_listen_what_todo',
+                    actions: assign({sentenceCounter: (context) => context.sentenceCounter + 1})
+                }
+            },
+            states: {
                 prompt: {
-                    entry: [
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    }))
+                }
+            }
+        },
+        uncertain_listen_what_todo: {
+            initial: 'listen',
+            on: {
+                TIMEOUT: [
+                    {
+                        target: 'reset_assistant_questions',
+                        cond: (context) => context.sentenceCounter >= context.sentences.length
+                    },
+                    {
+                        target: 'uncertain_what_todo'
+                    }
+                ],
+                RECOGNISED: [
+                    {
+                        target: 'say_help_2',
+                        cond: (context) => check_help(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'check_intent',
+                        cond: (context) => check_yes(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'reset_assistant_questions',
+                        cond: (context) => check_no(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'uncertain_invalid_what_todo'
+                    }
+                ]
+            },
+            states: {
+                listen: { entry: send('LISTEN') }
+            }
+        },
+        uncertain_invalid_what_todo: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'uncertain_reset_what_todo' },
+            states: {
+                prompt: {
+                    entry:
                         send((context: SDSContext) => ({
                             type: 'SPEAK',
-                            value: context.sentences[context.sentenceCounter]
+                            value: `I did not understand what you said: ${context.recResult[0].utterance}. Please say yes or no.`
                         }))
-                    ],
-                    on: {
-                        ENDSPEECH: {
-                            target: 'select_whattodo',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                select_whattodo: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is."),
-                    on: { ENDSPEECH: 'select_whattodo' }
                 }
             }
         },
-        check_whois: {
-            initial: 'reset',
+
+        reset_do_something_else: {
+            initial: 'setup',
+            on: { JUMP: 'do_something_else' },
+            states: {
+                setup: { entry: [
+                    assign({sentenceCounter: (context) => 0}),
+                    assign({sentences: (context) => ["Do you want me to do something else?", "I wonder if you need me for something else?", "Please confirm with, yes, if you need more assitance or say, no, if you are content."]}),
+                    send('JUMP')
+                ] }
+            }
+        },
+        do_something_else: {
+            initial: 'prompt',
             on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'info_meeting',
-                        cond: (context) => check_yes(context.recResult[0].utterance),
-                        actions: assign({ title: (context) => `Meeting with ${context.name}` })
-                    },
-                    {
-                        target: 'ask_whattodo',
-                        cond: (context) => check_no(context.recResult[0].utterance),
-                    },
-                    {
-                        target: '.nomatch'
-                    }
-                ],
-                HELPME: 'ask_whattodo',
+                ENDSPEECH: {
+                    target: 'listen_do_something_else',
+                    actions: assign({sentenceCounter: (context) => context.sentenceCounter + 1})
+                }
+            },
+            states: {
+                prompt: {
+                    entry: send((context: SDSContext) => ({
+                        type: 'SPEAK',
+                        value: context.sentences[context.sentenceCounter]
+                    }))
+                }
+            }
+        },
+        listen_do_something_else: {
+            initial: 'listen',
+            on: {
                 TIMEOUT: [
                     {
-                        target: 'idle',
+                        target: 'say_goodbye',
                         cond: (context) => context.sentenceCounter >= context.sentences.length
                     },
                     {
-                        target: '.ask_to_meet'
+                        target: 'do_something_else'
+                    }
+                ],
+                RECOGNISED: [
+                    {
+                        target: 'say_help_3',
+                        cond: (context) => check_help(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'reset_assistant_questions',
+                        cond: (context) => check_yes(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'say_goodbye',
+                        cond: (context) => check_no(context.recResult[0].utterance)
+                    },
+                    {
+                        target: 'invalid_do_something_else'
                     }
                 ]
             },
             states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => ["Do you want to meet them?", "Do you want to meet them 2?", "Do you want to meet them 3?"]})
-                    ],
-                    always: 'get_result'
-                },
-                helpme: {
-                    entry: say("This is some help 9."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
+                listen: { entry: send('LISTEN') }
+            }
+        },
+        invalid_do_something_else: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_do_something_else' },
+            states: {
+                prompt: {
+                    entry:
+                        send((context: SDSContext) => ({
+                            type: 'SPEAK',
+                            value: `I did not understand what you said: ${context.recResult[0].utterance}. Please say yes or no.`
+                        }))
+                }
+            }
+        },
+
+        say_goodbye: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'idle' },
+            states: { prompt: { entry: say("Thank you for this time and goodbye!") } }
+        },
+
+        say_help_1: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_assistant_questions' },
+            states: { prompt: { entry: say("This is Help 1.") } }
+        },
+        say_help_2: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'uncertain_reset_what_todo' },
+            states: { prompt: { entry: say("This is Help 2.") } }
+        },
+        say_help_3: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_do_something_else' },
+            states: { prompt: { entry: say("This is Help 3.") } }
+        },
+
+        check_intent: {
+            // TODO: fix this
+            initial: 'get_result',
+            on: {
+                JUMP: [
+                    {
+                        target: 'error_request',
+                        cond: (context) => context.interpreted_intent === "error"
+                    },
+                    {
+                        target: 'cook_food',
+                        cond: (context) => context.interpreted_intent === "greet"
+                        //cond: (context) => context.interpreted_intent === "cook"
+                    },
+                    {
+                        target: 'move_trash',
+                        cond: (context) => context.interpreted_intent === "goodbye"
+                        //cond: (context) => context.interpreted_intent === "clean"
+                    },
+                    {
+                        target: 'clean_room',
+                        cond: (context) => context.interpreted_intent === "mood_great"
+                        //cond: (context) => context.interpreted_intent === "vaccum"
+                    },
+                    {
+                        target: 'turn_on_light',
+                        cond: (context) => context.interpreted_intent === "affirm"
+                        //cond: (context) => context.interpreted_intent === "turn_on_light"
+                    },
+                    {
+                        target: 'turn_off_light',
+                        cond: (context) => context.interpreted_intent === "deny"
+                        //cond: (context) => context.interpreted_intent === "turn_off_light"
+                    },
+                    {
+                        target: 'clean_room',
+                        cond: (context) => context.interpreted_intent === "affirm"
+                        //cond: (context) => context.interpreted_intent === "turn_off_light"
+                    },
+                    {
+                        target: 'unknown_request'
+                    }
+                ]
+            },
+            states: {
+                some: {
+                    entry: send('JUMP')
                 },
                 get_result: {
                     invoke: {
                         id: 'getPerson',
-                        src: (context, event) => kbRequest(context.name),
+                        src: (context, event) => nluRequest(context.user_intent),
                         onDone: {
-                            target: 'tell_result',
-                            actions: assign({ nameinfo: (context, event) => {
-                                //console.log(event.data);
-                                let x : string = event.data.Abstract!;
-                                if (x === "") {
-                                    x = event.data.RelatedTopics[0].Text!; 
-                                }
-                                return x;
-                                }
-                            })
+                            actions: [
+                                assign({ interpreted_intent: (context, event) => {
+                                    console.log(event.data);
+                                    console.log(event.data.intent);
+                                    console.log(event.data.intent.name);
+                                    return event.data.intent.name!;
+                                    }
+                                }),
+                                assign({ interpreted_confidence: (context, event) => {
+                                    return event.data.intent.confidence;
+                                }}),
+                                send('JUMP')
+                            ]
                         },
                         onError: {
-                            target: 'nomatch',
-                            actions: assign({ error: (context, event) => event.data })
+                            actions: [
+                                assign({ error: (context, event) => event.data }),
+                                assign({ interpreted_intent: (context, event) => "error"}),
+                                assign({ interpreted_confidence: (context, event) => 1.0}),
+                                send('JUMP')
+                            ]
                         }
                     }
                 },
-                tell_result: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: `${context.nameinfo}.`
-                    })),
-                    on: { ENDSPEECH: 'ask_to_meet' }
-                },
-                ask_to_meet: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: context.sentences[context.sentenceCounter]
-                    })),
-                    on: {
-                        ENDSPEECH: {
-                            target: 'select_whattodo',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                select_whattodo: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is. Say yes or no."),
-                    on: { ENDSPEECH: 'select_whattodo' }
-                }
             }
         },
-        intro: {
+
+        cook_food: {
             initial: 'prompt',
-            on: {
-                ENDSPEECH: 'welcome'
-            },
-            states: {
-                prompt: {
-                    entry: say("Let's create a meeting"),
-                },
-            }
+            on: { ENDSPEECH: 'reset_do_something_else' },
+            states: { prompt: { entry: say("I will now cook some food!") } }
         },
-        unsure_of_welcome: {
-            initial: 'first_question',
-            on: {
-                RECOGNISED: [
-                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
-                    { target: '.no' }
-                ],
-                COMPUTER_RIGHT: [
-                    {
-                        target: 'info_meeting',
-                        cond: (context) => "title" in (grammar[context.saved[0].utterance] || {}),
-                        actions: [ assign({recResult: (c) => c.saved}), assign({ title: (c) => grammar[c.saved[0].utterance].title! }) ]
-                    },
-                    {
-                        target: 'welcome.nomatch',
-                        actions: [ assign({recResult: (c) => c.saved}) ]
-                    }
-                ],
-                COMPUTER_WRONG: { target: 'welcome', actions: assign({recResult: (c) => c.saved}) },
-                TIMEOUT: '.repeat_question'
-            },
-            states: {
-                first_question: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
-                    })),
-                    on: {
-                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
-                    }
-                },
-                repeat_question: {
-                    entry: [send((context) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
-                    }))],
-                    on: {
-                        ENDSPEECH: { actions: send('LISTEN') }
-                    }
-                },
-                yes: { entry: send('COMPUTER_RIGHT') },
-                no: { entry: send('COMPUTER_WRONG') }
-            }
-        },
-        welcome: {
-            initial: 'reset',
-            on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'unsure_of_welcome',
-                        cond: (context) => context.recResult[0].confidence < context.threshold
-                    },
-                    {
-                        target: 'info_meeting',
-                        cond: (context) => "title" in (grammar[context.recResult[0].utterance] || {}),
-                        actions: assign({ title: (context) => grammar[context.recResult[0].utterance].title! })
-                    },
-                    {
-                        target: '.nomatch'
-                    }
-                ],
-                HELPME: 'ask_whattodo',
-                TIMEOUT: [
-                    {
-                        target: 'idle',
-                        cond: (context) => context.sentenceCounter >= context.sentences.length
-                    },
-                    {
-                        target: '.prompt'
-                    }
-                ]
-            },
-            states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => ["What is it about?", "What is it about 2?", "What is it about 3?"]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("This is some help 3."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
-                prompt: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: context.sentences[context.sentenceCounter]
-                    })),
-                    on: {
-                        ENDSPEECH: {
-                            target: 'ask_meeting',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                ask_meeting: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is. Tell me something I know."),
-                    on: { ENDSPEECH: 'ask_meeting' }
-                }
-            }
-        },
-        info_meeting: {
-            entry: send((context) => ({
-                type: 'SPEAK',
-                value: `OK, ${context.title}`
-            })),
-            on: { ENDSPEECH: 'weekday' }
-        },
-        unsure_of_weekday: {
-            initial: 'first_question',
-            on: {
-                RECOGNISED: [
-                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
-                    { target: '.no' }
-                ],
-                COMPUTER_RIGHT: [
-                    {
-                        target: 'info_weekday',
-                        cond: (context) => "day" in (grammar[context.saved[0].utterance] || {}),
-                        actions: [ assign({recResult: (c) => c.saved}), assign({ day: (c) => grammar[c.saved[0].utterance].day! }) ]
-                    },
-                    {
-                        target: 'weekday.nomatch',
-                        actions: [ assign({recResult: (c) => c.saved}) ]
-                    }
-                ],
-                COMPUTER_WRONG: { target: 'weekday', actions: assign({recResult: (c) => c.saved}) },
-                TIMEOUT: '.repeat_question'
-            },
-            states: {
-                first_question: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
-                    })),
-                    on: {
-                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
-                    }
-                },
-                repeat_question: {
-                    entry: [send((context) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
-                    }))],
-                    on: {
-                        ENDSPEECH: { actions: send('LISTEN') }
-                    }
-                },
-                yes: { entry: send('COMPUTER_RIGHT') },
-                no: { entry: send('COMPUTER_WRONG') }
-            }
-        },
-        weekday: {
-            initial: 'reset',
-            on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'unsure_of_weekday',
-                        cond: (context) => context.recResult[0].confidence < context.threshold
-                    },
-                    {
-                        target: 'info_weekday',
-                        cond: (context) => "day" in (grammar[context.recResult[0].utterance] || {}),
-                        actions: assign({ day: (context) => grammar[context.recResult[0].utterance].day! })
-                    },
-                    {
-                        target: '.nomatch'
-                    }
-                ],
-                HELPME: 'intro',
-                TIMEOUT: [
-                    {
-                        target: 'idle',
-                        cond: (context) => context.sentenceCounter >= context.sentences.length
-                    },
-                    {
-                        target: '.prompt'
-                    }
-                ]
-            },
-            states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => ["On which day is it?", "On which day is it 2?", "On which day is it 3?"]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("This is some help 4."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
-                prompt: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: context.sentences[context.sentenceCounter]
-                    })),
-                    on: {
-                        ENDSPEECH: {
-                            target: 'ask_day',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                ask_day: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is. Tell me a weekday."),
-                    on: { ENDSPEECH: 'ask_day' }
-                }
-            }
-        },
-        info_weekday: {
-            entry: send((context) => ({
-                type: 'SPEAK',
-                value: `OK, ${context.day}`
-            })),
-            on: { ENDSPEECH: 'wholeday' }
-        },
-        wholeday: {
-            initial: 'reset',
-            on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'info_wholeday',
-                        cond: (context) => "acknowledge" in (grammar[context.recResult[0].utterance] || {}),
-                        actions: assign({ acknowledge: (context) => grammar[context.recResult[0].utterance].acknowledge! })
-                    },
-                    {
-                        target: '.nomatch'
-                    }
-                ],
-                HELPME: 'weekday',
-                TIMEOUT: [
-                    {
-                        target: 'idle',
-                        cond: (context) => context.sentenceCounter >= context.sentences.length
-                    },
-                    {
-                        target: '.prompt'
-                    }
-                ]
-            },
-            states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => ["Will it take the whole day?", "Will it take the whole day 2?", "Will it take the whole day 3?"]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("This is some help 5."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
-                prompt: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: context.sentences[context.sentenceCounter]
-                    })),
-                    on: {
-                        ENDSPEECH: {
-                            target: 'waitfor_yesno',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                waitfor_yesno: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is. Tell me a yes or a no."),
-                    on: { ENDSPEECH: 'waitfor_yesno' }
-                }
-            }
-        },
-        info_wholeday: {
-            entry: send((context) => ({
-                        type: 'SPEAK',
-                        value: `OK, ${context.acknowledge}`
-                    })),
-            on: { ENDSPEECH: [{
-                    target: 'meeting_wholeday',
-                    cond: (context) => context.acknowledge === "Yes"
-                },
-                {
-                    target: 'timeofday',
-                    cond: (context) => context.acknowledge === "No"
-                }] }
-        },
-        meeting_wholeday: {
-            initial: 'reset',
-            on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'info_meeting_wholeday',
-                        cond: (context) => "acknowledge" in (grammar[context.recResult[0].utterance] || {}),
-                        actions: assign({ acknowledge: (context) => grammar[context.recResult[0].utterance].acknowledge! })
-                    },
-                    {
-                        target: '.nomatch'
-                    }
-                ],
-                HELPME: 'wholeday',
-                TIMEOUT: [
-                    {
-                        target: 'idle',
-                        cond: (context) => context.sentenceCounter >= context.sentences.length
-                    },
-                    {
-                        target: '.prompt'
-                    }
-                ]
-            },
-            states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => [`Do you want me to create a meeting titled ${context.title} on ${context.day} for the whole day?`, "Do you want me to create the meeting?", "Please let me know if you want to create the meeting?"]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("This is some help 6."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
-                prompt: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: context.sentences[context.sentenceCounter]
-                    })),
-                    on: {
-                        ENDSPEECH: {
-                            target: 'waitfor_yesno',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                waitfor_yesno: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is. Tell me a yes or a no."),
-                    on: { ENDSPEECH: 'waitfor_yesno' }
-                }
-            }
-        },
-        info_meeting_wholeday: {
-            entry: send((context) => ({
-                        type: 'SPEAK',
-                        value: `OK, ${context.acknowledge}`
-                    })),
-            on: { ENDSPEECH: [{
-                    target: 'done',
-                    cond: (context) => context.acknowledge === "Yes"
-                },
-                {
-                    target: 'ask_whattodo',
-                    cond: (context) => context.acknowledge === "No"
-                }] }
-        },
-        unsure_of_timeofday: {
-            initial: 'first_question',
-            on: {
-                RECOGNISED: [
-                    { target: '.yes', cond: (context) => check_yes(context.recResult[0].utterance) },
-                    { target: '.no' }
-                ],
-                COMPUTER_RIGHT: [
-                    {
-                        target: 'info_timeofday',
-                        cond: (context) => "time" in (grammar[context.saved[0].utterance] || {}),
-                        actions: [assign({recResult: (c) => c.saved}), assign({ time: (c) => grammar[c.saved[0].utterance].time! })]
-                    },
-                    {
-                        target: 'timeofday.nomatch',
-                        actions: [ assign({recResult: (c) => c.saved}) ]
-                    }
-                ],
-                COMPUTER_WRONG: { target: 'timeofday', actions: assign({recResult: (c) => c.saved}) },
-                TIMEOUT: '.repeat_question'
-            },
-            states: {
-                first_question: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.recResult[0].utterance}?`
-                    })),
-                    on: {
-                        ENDSPEECH: { actions: [ send('LISTEN'), assign({saved: (c) => c.recResult}) ] }
-                    }
-                },
-                repeat_question: {
-                    entry: [send((context) => ({
-                        type: 'SPEAK', value: `Did you say: ${context.saved[0].utterance}?`
-                    }))],
-                    on: {
-                        ENDSPEECH: { actions: send('LISTEN') }
-                    }
-                },
-                yes: { entry: send('COMPUTER_RIGHT') },
-                no: { entry: send('COMPUTER_WRONG') }
-            }
-        },
-        timeofday: {
-            initial: 'reset',
-            on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'unsure_of_timeofday',
-                        cond: (context) => context.recResult[0].confidence < context.threshold
-                    },
-                    {
-                        target: 'info_timeofday',
-                        cond: (context) => "time" in (grammar[context.recResult[0].utterance] || {}),
-                        actions: assign({ time: (context) => grammar[context.recResult[0].utterance].time! })
-                    },
-                    {
-                        target: '.nomatch'
-                    }
-                ],
-                HELPME: 'meeting_wholeday',
-                TIMEOUT: [
-                    {
-                        target: 'idle',
-                        cond: (context) => context.sentenceCounter >= context.sentences.length
-                    },
-                    {
-                        target: '.prompt'
-                    }
-                ]
-            },
-            states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => ["What time is your meeting?", "What time is your meeting 2?", "What time is your meeting 3?"]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("This is some help 7."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
-                prompt: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: context.sentences[context.sentenceCounter]
-                    })),
-                    on: {
-                        ENDSPEECH: {
-                            target: 'ask_time',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                ask_time: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what hour that is. Tell me an hour."),
-                    on: { ENDSPEECH: 'ask_time' }
-                }
-            }
-        },
-        info_timeofday: {
-            entry: send((context) => ({
-                type: 'SPEAK',
-                value: `OK, ${context.time}`
-            })),
-            on: { ENDSPEECH: 'meeting_time' }
-        },
-        meeting_time: {
-            initial: 'reset',
-            on: {
-                RECOGNISED: [
-                    {
-                        target: '.helpme',
-                        cond: (context) => context.recResult[0].utterance! === "Help."
-                    },
-                    {
-                        target: 'info_meeting_time',
-                        cond: (context) => "acknowledge" in (grammar[context.recResult[0].utterance] || {}),
-                        actions: assign({ acknowledge: (context) => grammar[context.recResult[0].utterance].acknowledge! })
-                    },
-                    {
-                        target: '.nomatch'
-                    }
-                ],
-                HELPME: 'meeting_wholeday',
-                TIMEOUT: [
-                    {
-                        target: 'idle',
-                        cond: (context) => context.sentenceCounter >= context.sentences.length
-                    },
-                    {
-                        target: '.prompt'
-                    }
-                ]
-            },
-            states: {
-                reset: {
-                    entry: [
-                        assign({ sentenceCounter: (context) => 0}),
-                        assign({ sentences: (context) => [`Do you want me to create a meeting titled ${context.title} on ${context.day} at ${context.time}?`, `Do you want the meeting ${context.title} on ${context.day} at ${context.time}?`, "Please tell if you want to create the meeting?"]})
-                    ],
-                    always: 'prompt'
-                },
-                helpme: {
-                    entry: say("This is some help 8."),
-                    on: { ENDSPEECH: {actions:send('HELPME')} }
-                },
-                prompt: {
-                    entry: send((context: SDSContext) => ({
-                        type: 'SPEAK',
-                        value: context.sentences[context.sentenceCounter]
-                    })),
-                    on: {
-                        ENDSPEECH: {
-                            target: 'waitfor_yesno',
-                            actions: assign({ sentenceCounter: (context) => context.sentenceCounter + 1})
-                        }
-                    }
-                },
-                waitfor_yesno: {
-                    entry: send('LISTEN')
-				},
-                nomatch: {
-                    entry: say("Sorry, I don't know what it is. Tell me a yes or a no."),
-                    on: { ENDSPEECH: 'waitfor_yesno' }
-                }
-            }
-        },
-        info_meeting_time: {
-            entry: send((context) => ({
-                        type: 'SPEAK',
-                        value: `OK, ${context.acknowledge}`
-                    })),
-            on: { ENDSPEECH: [{
-                    target: 'done',
-                    cond: (context) => context.acknowledge === "Yes"
-                },
-                {
-                    target: 'ask_whattodo',
-                    cond: (context) => context.acknowledge === "No"
-                }] }
-        },
-        done: {
+        move_trash: {
             initial: 'prompt',
-            states: {
-                prompt: {
-                    entry: say("Your meeting has been created"),
-                    on: { ENDSPEECH: 'stop' }
-                },
-                stop: {
-                    type: 'final'
-                }
-            }
+            on: { ENDSPEECH: 'reset_do_something_else' },
+            states: { prompt: { entry: say("I will now take out the trash!") } }
+        },
+        clean_room: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_do_something_else' },
+            states: { prompt: { entry: say("I will now clean up your room!") } }
+        },
+        turn_on_light: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_do_something_else' },
+            states: { prompt: { entry: say("I will now turn on the light!") } }
+        },
+        turn_off_light: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_do_something_else' },
+            states: { prompt: { entry: say("I will now turn off the light!") } }
+        },
+        unknown_request: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'reset_assistant_questions' },
+            states: { prompt: { entry: send((context : SDSContext) => ({ type: 'SPEAK', value: `I cannot serve you with your request: ${context.user_intent}! Please try something I can do.`})) } }
+        },
+        error_request: {
+            initial: 'prompt',
+            on: { ENDSPEECH: 'say_goodbye' },
+            states: { prompt: { entry: say("I am not able to ask the server now, please try again!") } }
         }
     }
 })
